@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>🐷 Fun Farm 🍎</title>
+<style>
+  /* ---------- Looks of the game (colors, fonts, layout) ---------- */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Comic Sans MS", "Trebuchet MS", system-ui, sans-serif;
+    background: linear-gradient(#87ceeb 0%, #a8e063 45%, #7cba3d 100%);
+    background-attachment: fixed;
+    color: #3a2d1b;
+    min-height: 100vh;
+  }
+  h1 { text-align: center; margin: 12px 0 4px; font-size: 30px; text-shadow: 1px 1px #fff; }
+  .subtitle { text-align: center; margin: 0 0 10px; opacity: .8; font-size: 14px; }
+
+  /* Top bar with money and inventory */
+  .topbar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+    background: rgba(255,255,255,.85); padding: 10px; border-bottom: 3px solid #6b4f2a;
+  }
+  .chip {
+    background: #fff8e7; border: 2px solid #d9b873; border-radius: 14px;
+    padding: 6px 12px; font-weight: bold; font-size: 15px; white-space: nowrap;
+  }
+  .money { background: #fff4c2; border-color: #e0c200; }
+  .level { background: #e7d6ff; border-color: #a07bdd; }
+
+  .wrap { max-width: 820px; margin: 0 auto; padding: 12px; }
+  .panel {
+    background: rgba(255,255,255,.9); border: 3px solid #6b4f2a; border-radius: 16px;
+    padding: 14px; margin-bottom: 16px; box-shadow: 0 4px 0 rgba(0,0,0,.15);
+  }
+  .panel h2 { margin: 0 0 10px; font-size: 20px; }
+
+  /* Buttons */
+  button {
+    font-family: inherit; cursor: pointer; border-radius: 12px; border: 2px solid #6b4f2a;
+    padding: 8px 12px; font-size: 14px; font-weight: bold; background: #ffe08a; color: #3a2d1b;
+    box-shadow: 0 3px 0 #b88a2a; transition: transform .05s;
+  }
+  button:active { transform: translateY(2px); box-shadow: 0 1px 0 #b88a2a; }
+  button:disabled { opacity: .45; cursor: not-allowed; box-shadow: 0 3px 0 #999; }
+  button.locked { background: #e3e3e3; }
+
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  /* Seed/animal picker tabs */
+  .tab {
+    background: #fff; border: 2px solid #c9a85f; padding: 8px 10px; border-radius: 12px;
+    font-weight: bold; font-size: 13px;
+  }
+  .tab.active { background: #ffe08a; outline: 3px solid #6b4f2a; }
+
+  /* Grid of plots / pens */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px; }
+  .cell {
+    border: 2px dashed #6b4f2a; border-radius: 14px; min-height: 96px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; text-align: center; padding: 6px; user-select: none; position: relative;
+  }
+  .plot { background: #c98a4b; }       /* dirt */
+  .plot.has   { background: #9c6a33; }
+  .pen  { background: #cdeeae; }       /* grass */
+  .emoji { font-size: 34px; line-height: 1; }
+  .small { font-size: 11px; margin-top: 4px; }
+
+  /* growth progress bar */
+  .bar { width: 80%; height: 7px; background: #00000033; border-radius: 6px; overflow: hidden; margin-top: 5px; }
+  .bar > span { display: block; height: 100%; background: #4caf50; width: 0%; }
+  .bar.ready > span { background: #ffd000; }
+
+  .ready-tag { position: absolute; top: 4px; right: 6px; font-size: 11px; background: #ffd000;
+    border-radius: 8px; padding: 1px 5px; border: 1px solid #6b4f2a; font-weight: bold; }
+
+  .hint { font-size: 12px; opacity: .75; margin-top: 6px; }
+  .log { font-size: 13px; min-height: 18px; text-align: center; margin: 4px 0 0; font-weight: bold; color: #2c5e1a; }
+  .toolbar { display: flex; justify-content: center; gap: 8px; margin: 6px 0 14px; }
+  .toolbar button { background: #fff; box-shadow: 0 3px 0 #aaa; }
+
+  /* Level progress panel */
+  .levelbar { width: 100%; height: 16px; background: #00000022; border-radius: 9px; overflow: hidden; margin-top: 6px; border:2px solid #6b4f2a;}
+  .levelbar > span { display: block; height: 100%; background: linear-gradient(#b07bff,#7c4fd0); width: 0%; transition: width .3s; }
+  .lvldone { color: #2c5e1a; font-weight: bold; }
+</style>
+</head>
+<body>
+  <h1>🐷 Fun Farm 🍎</h1>
+  <p class="subtitle">Grow food → feed animals → sell them → reach the next level!</p>
+
+  <!-- Money + inventory bar -->
+  <div class="topbar" id="topbar"></div>
+  <p class="log" id="log">Welcome! Plant some apple trees to get started. 🌱</p>
+
+  <div class="wrap">
+
+    <!-- LEVEL PROGRESS -->
+    <div class="panel">
+      <h2>🪜 Your progress</h2>
+      <div id="progress"></div>
+    </div>
+
+    <!-- FIELDS -->
+    <div class="panel">
+      <h2>🌱 Fields</h2>
+      <p class="hint">Pick a seed, then click an empty plot to plant it. Wait for it to grow, then click again to harvest.</p>
+      <div class="row" id="seedTabs" style="margin:8px 0"></div>
+      <div class="grid" id="fields"></div>
+      <div class="row" style="margin-top:10px">
+        <button id="buyPlot">🟫 Buy new plot</button>
+      </div>
+    </div>
+
+    <!-- ANIMALS -->
+    <div class="panel">
+      <h2>🐮 Animals</h2>
+      <p class="hint">Buy an animal, then click it to feed it. When it's fully grown, sell it for money!</p>
+      <div class="row" id="animalShop" style="margin:8px 0"></div>
+      <div class="grid" id="pens"></div>
+    </div>
+
+    <!-- INVENTORY / SELLING -->
+    <div class="panel">
+      <h2>📦 Storage — sell extra crops</h2>
+      <div class="row" id="sellRow"></div>
+    </div>
+
+    <div class="toolbar">
+      <button id="resetBtn">🔄 Restart game</button>
+    </div>
+  </div>
+
+<script>
+/* =====================================================================
+   FUN FARM  — a tiny Hay-Day-style game in one file.
+
+   THE PROGRESSION (unlocks automatically by money you've EARNED):
+     Level 1: 🍎 apples  -> feed 🐷 pigs   -> sell pigs
+     Level 2: 🥕 carrots -> feed 🐄 cows   -> sell cows   (opens after you EARN $100 from pigs)
+     Level 3: 🍓 berries  -> feed 🐑 sheep  -> sell sheep  (opens after you EARN $300 from cows)
+     ...then keep farming forever!
+
+   Beginner tip: change the numbers below to make the game easier/harder.
+   ===================================================================== */
+
+// How much you must EARN from one animal to open the next level:
+const PIG_GOAL = 100;   // earn this from pigs -> unlock carrots + cows
+const COW_GOAL = 300;   // earn this from cows -> unlock strawberries + sheep
+
+// ---- CROPS: what you can plant in the fields ----
+const CROPS = {
+  apple:      { name: "Apple",      emoji: "🍎", seedCost: 5,  growMs: 8000,  yield: 3, sellEach: 4  },
+  carrot:     { name: "Carrot",     emoji: "🥕", seedCost: 8,  growMs: 6000,  yield: 3, sellEach: 6  },
+  strawberry: { name: "Strawberry", emoji: "🍓", seedCost: 15, growMs: 10000, yield: 2, sellEach: 14 },
+};
+
+// ---- ANIMALS: what you can raise. They eat a crop, then you sell them. ----
+const ANIMALS = {
+  pig:   { name: "Pig",   emoji: "🐷", baby: "🐖", buyCost: 25,  eats: "apple",      needFeed: 3, sellPrice: 70  },
+  cow:   { name: "Cow",   emoji: "🐄", baby: "🐮", buyCost: 70,  eats: "carrot",     needFeed: 4, sellPrice: 190 },
+  sheep: { name: "Sheep", emoji: "🐑", baby: "🐏", buyCost: 120, eats: "strawberry", needFeed: 4, sellPrice: 320 },
+};
+
+const PLOT_COST = 30;   // price of buying an extra field plot
+
+// ---- GAME STATE (saved to your browser) ----
+let state;
+function freshState() {
+  return {
+    money: 50,
+    inventory: { apple: 0, carrot: 0, strawberry: 0 },
+    plots: Array.from({ length: 4 }, () => ({ crop: null, plantedAt: 0 })),
+    animals: [],                          // each: { type, fed }
+    earned: { pig: 0, cow: 0, sheep: 0 }, // money earned from selling each animal type
+    selectedSeed: "apple",
+  };
+}
+function load() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("funfarm"));
+    state = saved && saved.money !== undefined && saved.earned ? saved : freshState();
+  } catch { state = freshState(); }
+}
+function save() { localStorage.setItem("funfarm", JSON.stringify(state)); }
+
+function now() { return Date.now(); }
+function log(msg) { document.getElementById("log").textContent = msg; }
+
+// LEVEL LOGIC — what is unlocked depends on how much you've earned.
+function level2Open() { return state.earned.pig >= PIG_GOAL; }   // carrots + cows
+function level3Open() { return state.earned.cow >= COW_GOAL; }   // strawberries + sheep
+
+function cropUnlocked(id) {
+  if (id === "carrot") return level2Open();
+  if (id === "strawberry") return level3Open();
+  return true; // apple
+}
+function animalUnlocked(id) {
+  if (id === "cow") return level2Open();
+  if (id === "sheep") return level3Open();
+  return true; // pig
+}
+
+/* ---------------- ACTIONS ---------------- */
+
+function plant(plotIndex) {
+  const plot = state.plots[plotIndex];
+  const seed = state.selectedSeed;
+  const crop = CROPS[seed];
+  if (plot.crop) { return harvest(plotIndex); } // clicking a planted plot tries to harvest
+  if (!cropUnlocked(seed)) { log("That crop is locked — reach the level that unlocks it first!"); return; }
+  if (state.money < crop.seedCost) { log("Not enough money for " + crop.name + " seeds."); return; }
+  state.money -= crop.seedCost;
+  plot.crop = seed;
+  plot.plantedAt = now();
+  log("Planted " + crop.emoji + " " + crop.name + "!");
+  render();
+}
+
+function harvest(plotIndex) {
+  const plot = state.plots[plotIndex];
+  if (!plot.crop) return;
+  const crop = CROPS[plot.crop];
+  const done = now() - plot.plantedAt >= crop.growMs;
+  if (!done) { log("Still growing… give it a moment. ⏳"); return; }
+  state.inventory[plot.crop] += crop.yield;
+  log("Harvested " + crop.yield + " " + crop.emoji + " " + crop.name + "!");
+  plot.crop = null;
+  plot.plantedAt = 0;
+  render();
+}
+
+function buyPlot() {
+  if (state.money < PLOT_COST) { log("Need $" + PLOT_COST + " for a new plot."); return; }
+  state.money -= PLOT_COST;
+  state.plots.push({ crop: null, plantedAt: 0 });
+  log("New plot added! 🟫");
+  render();
+}
+
+function buyAnimal(type) {
+  const a = ANIMALS[type];
+  if (!animalUnlocked(type)) { log(a.name + " is locked — reach the level that unlocks it."); return; }
+  if (state.money < a.buyCost) { log("Not enough money for a " + a.name + "."); return; }
+  state.money -= a.buyCost;
+  state.animals.push({ type, fed: 0 });
+  log("Bought a baby " + a.emoji + " " + a.name + "!");
+  render();
+}
+
+function clickAnimal(index) {
+  const animal = state.animals[index];
+  const a = ANIMALS[animal.type];
+  if (animal.fed >= a.needFeed) { return sellAnimal(index); } // grown → sell
+  // otherwise feed it
+  if (state.inventory[a.eats] <= 0) {
+    log(a.name + " is hungry! It needs " + CROPS[a.eats].emoji + " " + CROPS[a.eats].name + ".");
+    return;
+  }
+  state.inventory[a.eats]--;
+  animal.fed++;
+  if (animal.fed >= a.needFeed) log(a.emoji + " is all grown up — click again to sell! 💰");
+  else log("Fed the " + a.name + " (" + animal.fed + "/" + a.needFeed + ").");
+  render();
+}
+
+function sellAnimal(index) {
+  const animal = state.animals[index];
+  const a = ANIMALS[animal.type];
+  const before2 = level2Open(), before3 = level3Open();
+  state.money += a.sellPrice;
+  state.earned[animal.type] += a.sellPrice;   // remember earnings for leveling
+  state.animals.splice(index, 1);
+  log("Sold a " + a.emoji + " " + a.name + " for $" + a.sellPrice + "! 🎉");
+  // Did this sale just unlock a new level?
+  if (!before2 && level2Open()) log("🎉 LEVEL 2! Carrots 🥕 and cows 🐄 are now unlocked!");
+  if (!before3 && level3Open()) log("🎉 LEVEL 3! Strawberries 🍓 and sheep 🐑 are now unlocked!");
+  render();
+}
+
+function sellCrop(id) {
+  if (state.inventory[id] <= 0) return;
+  state.inventory[id]--;
+  state.money += CROPS[id].sellEach;
+  log("Sold 1 " + CROPS[id].emoji + " for $" + CROPS[id].sellEach + ".");
+  render();
+}
+
+function resetGame() {
+  if (!confirm("Restart the whole game from the beginning?")) return;
+  state = freshState();
+  save();
+  render();
+  log("Fresh farm! Plant some apple trees. 🌱");
+}
+
+/* ---------------- DRAWING THE SCREEN ---------------- */
+
+function currentLevel() {
+  if (level3Open()) return 3;
+  if (level2Open()) return 2;
+  return 1;
+}
+
+function render() {
+  // Top bar: money, level, each unlocked crop in storage
+  let top = '<span class="chip money">💰 $' + state.money + '</span>';
+  top += '<span class="chip level">🪜 Level ' + currentLevel() + '</span>';
+  for (const id in CROPS) {
+    if (cropUnlocked(id)) top += '<span class="chip">' + CROPS[id].emoji + ' ' + state.inventory[id] + '</span>';
+  }
+  document.getElementById("topbar").innerHTML = top;
+
+  // Progress panel — show how close you are to the next unlock
+  let prog = "";
+  if (!level2Open()) {
+    const pct = Math.min(100, Math.round(state.earned.pig / PIG_GOAL * 100));
+    prog = '<b>Level 2 — unlock 🥕 carrots &amp; 🐄 cows</b><br>' +
+           'Earn $' + PIG_GOAL + ' from selling 🐷 pigs. So far: $' + state.earned.pig + ' / $' + PIG_GOAL +
+           '<div class="levelbar"><span style="width:' + pct + '%"></span></div>';
+  } else if (!level3Open()) {
+    const pct = Math.min(100, Math.round(state.earned.cow / COW_GOAL * 100));
+    prog = '<div class="lvldone">✅ Level 2 unlocked — carrots &amp; cows!</div>' +
+           '<b>Level 3 — unlock 🍓 strawberries &amp; 🐑 sheep</b><br>' +
+           'Earn $' + COW_GOAL + ' from selling 🐄 cows. So far: $' + state.earned.cow + ' / $' + COW_GOAL +
+           '<div class="levelbar"><span style="width:' + pct + '%"></span></div>';
+  } else {
+    prog = '<div class="lvldone">🏆 All levels unlocked! Keep farming and stacking money. 💰</div>';
+  }
+  document.getElementById("progress").innerHTML = prog;
+
+  // Seed picker tabs
+  let tabs = "";
+  for (const id in CROPS) {
+    const c = CROPS[id];
+    const unlocked = cropUnlocked(id);
+    const active = state.selectedSeed === id ? " active" : "";
+    tabs += '<button class="tab' + active + '" ' + (unlocked ? "" : "disabled") +
+      ' onclick="selectSeed(\'' + id + '\')">' + c.emoji + ' ' + (unlocked ? c.name : "🔒") +
+      '<div class="small">' + (unlocked ? '$' + c.seedCost + ' / seed' : 'locked') + '</div></button>';
+  }
+  document.getElementById("seedTabs").innerHTML = tabs;
+
+  // Field plots
+  let fields = "";
+  state.plots.forEach((plot, i) => {
+    if (!plot.crop) {
+      fields += '<div class="cell plot" onclick="plant(' + i + ')"><div class="emoji">🟫</div><div class="small">empty</div></div>';
+    } else {
+      const c = CROPS[plot.crop];
+      const pct = Math.min(100, Math.round((now() - plot.plantedAt) / c.growMs * 100));
+      const ready = pct >= 100;
+      fields += '<div class="cell plot has" onclick="plant(' + i + ')">' +
+        (ready ? '<div class="ready-tag">ready!</div>' : '') +
+        '<div class="emoji">' + (ready ? c.emoji : "🌱") + '</div>' +
+        '<div class="small">' + c.name + '</div>' +
+        '<div class="bar' + (ready ? ' ready' : '') + '"><span style="width:' + pct + '%"></span></div></div>';
+    }
+  });
+  document.getElementById("fields").innerHTML = fields;
+  document.getElementById("buyPlot").disabled = state.money < PLOT_COST;
+  document.getElementById("buyPlot").textContent = "🟫 Buy new plot ($" + PLOT_COST + ")";
+
+  // Animal shop buttons
+  let shop = "";
+  for (const id in ANIMALS) {
+    const a = ANIMALS[id];
+    const unlocked = animalUnlocked(id);
+    shop += '<button ' + (unlocked && state.money >= a.buyCost ? "" : "disabled") +
+      ' class="' + (unlocked ? "" : "locked") + '" onclick="buyAnimal(\'' + id + '\')">' +
+      (unlocked ? 'Buy ' + a.emoji + ' ' + a.name : '🔒 ' + a.name) +
+      '<div class="small">' + (unlocked ? '$' + a.buyCost + ' · eats ' + CROPS[a.eats].emoji + ' · sells $' + a.sellPrice : 'locked') + '</div></button>';
+  }
+  document.getElementById("animalShop").innerHTML = shop;
+
+  // Animal pens
+  let pens = "";
+  state.animals.forEach((animal, i) => {
+    const a = ANIMALS[animal.type];
+    const grown = animal.fed >= a.needFeed;
+    const face = grown ? a.emoji : a.baby;
+    pens += '<div class="cell pen" onclick="clickAnimal(' + i + ')">' +
+      (grown ? '<div class="ready-tag">sell!</div>' : '') +
+      '<div class="emoji">' + face + '</div>' +
+      '<div class="small">' + (grown ? "Click to sell 💰" : "Feed " + CROPS[a.eats].emoji + " " + animal.fed + "/" + a.needFeed) + '</div>' +
+      '<div class="bar' + (grown ? ' ready' : '') + '"><span style="width:' + Math.round(animal.fed / a.needFeed * 100) + '%"></span></div></div>';
+  });
+  if (state.animals.length === 0) pens = '<div class="hint">No animals yet — buy one above! ⬆️</div>';
+  document.getElementById("pens").innerHTML = pens;
+
+  // Sell crops row
+  let sell = "";
+  for (const id in CROPS) {
+    if (!cropUnlocked(id)) continue;
+    sell += '<button ' + (state.inventory[id] > 0 ? "" : "disabled") +
+      ' onclick="sellCrop(\'' + id + '\')">Sell ' + CROPS[id].emoji + ' ($' + CROPS[id].sellEach + ')' +
+      '<div class="small">have ' + state.inventory[id] + '</div></button>';
+  }
+  document.getElementById("sellRow").innerHTML = sell;
+
+  save();
+}
+
+function selectSeed(id) { if (cropUnlocked(id)) state.selectedSeed = id; render(); }
+
+document.getElementById("buyPlot").onclick = buyPlot;
+document.getElementById("resetBtn").onclick = resetGame;
+
+// ---- Start the game ----
+load();
+render();
+// Re-draw twice a second so growth bars update live.
+setInterval(render, 500);
+</script>
+</body>
+</html>
