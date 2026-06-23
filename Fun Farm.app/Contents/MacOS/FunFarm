@@ -1,0 +1,7 @@
+#!/bin/bash
+# Launcher for the Fun Farm game.
+# This script lives in: <repo>/Fun Farm.app/Contents/MacOS/FunFarm
+# So the repo folder (which holds index.html) is three levels up.
+HERE="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$HERE/../../.." && pwd)"
+open "$ROOT/index.html"
